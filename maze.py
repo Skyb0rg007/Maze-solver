@@ -3,32 +3,35 @@
 
 import sys
 import numpy
-from PIL import Image
+import PIL.Image
+
+class MazeError(Exception):
+    def __init__(self, msg):
+        self.message = msg
 
 class Maze:
     grey = 127
 
-    def __init__(self, filename, factor=1):
-        image = Image.open(filename) \
+    def __init__(self, filename, factor):
+        image = PIL.Image.open(filename) \
                      .convert('L')   \
                      .point(lambda p: 255 if p > 128 else 0)
         w, h = image.size
-        image = image.resize((w//factor, h//factor), Image.NEAREST)
+        image = image.resize((w//factor, h//factor), PIL.Image.NEAREST)
         self.array = numpy.array(image, dtype=numpy.uint8)
         self.factor = factor
 
     # Display the image, un-resizing it
     def show(self):
-        self.image.show()
+        self.image().show()
 
-    @property
     def image(self):
-        image = Image.fromarray(self.array, mode='L')
+        image = PIL.Image.fromarray(self.array, mode='L')
         w, h = image.size
-        return image.resize((w*self.factor, h*self.factor), Image.NEAREST)
+        return image.resize((w*self.factor, h*self.factor), PIL.Image.NEAREST)
 
     def save(self, filename, format):
-        self.image.save(filename, format)
+        self.image().save(filename, format)
 
     # Returns pixels adjacent to the given tuple
     def getadjacent(self, n):
@@ -51,7 +54,7 @@ class Maze:
         start, end = None, None
         w = self.array.shape[0]
         for i in range(2, self.array.shape[1]-2):
-            if m.array[w-1, i] == 255:
+            if self.array[w-1, i] == 255:
                 if skip == True:
                     continue
                 if start == None:
@@ -64,14 +67,11 @@ class Maze:
                     break
             else:
                 skip = False
-        if start == None or end == None:
-            print('No start/end!')
-            exit(1)
-        start = (w-1, start)
-        end = (w-1, end)
-        assert self.array[start] == 255
-        assert self.array[end] == 255
-        return start, end
+        if start == None or end == None          \
+                or self.array[w-1, start] != 255 \
+                or self.array[w-1, end] != 255:
+            raise MazeError('Could not find valid start/end positions')
+        return (w-1, start), (w-1, end)
 
     # Perform a standard BFS
     def bfs(self, start, end):
@@ -90,8 +90,7 @@ class Maze:
                     new_path = path.copy()
                     new_path.append(adjacent)
                     q.append(new_path)
-        print('No answer!')
-        exit(1)
+        raise MazeError('bfs() could not find an answer')
 
     def color_result(self, path):
         for pixel in path:
@@ -103,14 +102,18 @@ class Maze:
         white_to_grey = numpy.vectorize(lambda p: self.grey if p == 255 else p)
         self.array = white_to_grey(self.array)
 
-assert len(sys.argv) > 1
-m = Maze(sys.argv[1], 4)
+def main():
+    assert len(sys.argv) > 1
+    m = Maze(sys.argv[1], 4)
 
-start, end = m.find_start_end()
-path = m.bfs(start, end)
-m.color_result(path)
+    start, end = m.find_start_end()
+    path = m.bfs(start, end)
+    m.color_result(path)
 
-if len(sys.argv) > 2:
-    m.save(sys.argv[2], 'PNG')
-m.show()
+    if len(sys.argv) > 2:
+        m.save(sys.argv[2], 'PNG')
+    m.show()
+
+if __name__ == '__main__':
+    main()
 
